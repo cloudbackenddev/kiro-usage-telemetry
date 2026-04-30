@@ -1,0 +1,13 @@
+index.ts
+✅ Change initialize(), search(), embedAll() — ~30 lines
+config.ts
+✅ Add remoteEmbeddingApiKey field — ~5 lines
+pipeline.ts
+✅ No change — calls vectors.embedAll() which stays the same signature
+index.ts
+✅ No change — calls vectors.initialize() which stays the same signature
+All CLI commands (50+)	✅ No change — they never touch embedding internals
+MCP tools	✅ No change
+DB / storage	✅ No change — vectors still stored as Float32Array in sqlite-vec
+config.json
+⚠️ Update embeddingModel + embeddingDim, add API key
