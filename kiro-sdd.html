@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spec-Driven Development with Kiro — Virtual Cards Pilot</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* === VIEWPORT BASE === */
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#3C1053;}
+.deck-viewport{position:fixed;inset:0;overflow:hidden;background:#3C1053;}
+.deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;display:block;visibility:hidden;opacity:0;pointer-events:none;}
+.slide.active{visibility:visible;opacity:1;pointer-events:auto;z-index:1;}
+img,video,canvas,svg{max-width:100%;max-height:100%;}
+
+/* === NATWEST PURPLE DESIGN SYSTEM === */
+:root{
+  --nw-dark:#4B0082;--nw-dark-alt:#3C1053;--nw-white:#FFFFFF;--nw-offwhite:#F7F4FB;
+  --nw-lilac:#EDD9F5;--nw-lavender:#C09FD4;--nw-gold:#F5C518;
+  --nw-mid:#6B2A8B;--nw-text:#3C1053;--nw-body:#333333;
+  --nw-muted:#6B2A8B;--nw-hint:#9B7AB8;
+  --nw-border-dark:#6B2A8B;--nw-border-light:#C09FD4;
+  --ff-serif:"Playfair Display",Georgia,serif;
+  --ff-sans:"IBM Plex Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --ff-mono:"IBM Plex Mono",monospace;
+  --pad-x:144px;--pad-y:56px;--gap-lg:40px;--gap-md:24px;--gap-sm:12px;
+  --ease-expo:cubic-bezier(0.16,1,0.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+
+/* === DARK SLIDE TEXTURE === */
+.dark-slide{background:var(--nw-dark);}
+.dark-slide::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px);background-size:80px 80px;pointer-events:none;z-index:0;}
+.dark-slide>*{position:relative;z-index:1;}
+
+/* === LIGHT SLIDE === */
+.light-slide{background:var(--nw-white);}
+
+/* === CHROME BARS === */
+.chrome-bar{display:flex;align-items:center;justify-content:space-between;padding:0 var(--pad-x);height:60px;border-bottom:1px solid var(--nw-border-light);background:var(--nw-white);flex-shrink:0;}
+.chrome-label{font-family:var(--ff-mono);font-size:13px;font-weight:500;letter-spacing:0.18em;text-transform:uppercase;color:var(--nw-muted);}
+.chrome-counter{font-family:var(--ff-mono);font-size:13px;color:var(--nw-hint);}
+.foot-bar{display:flex;align-items:center;justify-content:space-between;padding:0 var(--pad-x);height:52px;border-top:1px solid var(--nw-border-light);background:var(--nw-white);flex-shrink:0;}
+.foot-label{font-family:var(--ff-mono);font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-hint);}
+
+/* === LAYOUT === */
+.slide-inner{display:flex;flex-direction:column;height:100%;}
+.slide-body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:var(--pad-y) var(--pad-x);gap:var(--gap-md);}
+.slide-body.top{justify-content:flex-start;padding-top:44px;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;flex:1;overflow:hidden;}
+.two-col.left-wide{grid-template-columns:1.2fr 0.8fr;}
+.col-left{padding:var(--pad-y) var(--pad-x);display:flex;flex-direction:column;justify-content:center;gap:var(--gap-md);}
+.col-right{padding:var(--pad-y) var(--pad-x);display:flex;flex-direction:column;justify-content:center;gap:var(--gap-md);background:var(--nw-offwhite);border-left:1px solid var(--nw-border-light);}
+
+/* === TYPOGRAPHY === */
+.kicker{font-family:var(--ff-mono);font-size:13px;font-weight:500;letter-spacing:0.2em;text-transform:uppercase;color:var(--nw-muted);display:flex;align-items:center;gap:14px;}
+.kicker::before{content:"";display:block;width:32px;height:1px;background:var(--nw-muted);flex-shrink:0;}
+.kicker-gold{font-family:var(--ff-mono);font-size:13px;font-weight:500;letter-spacing:0.2em;text-transform:uppercase;color:var(--nw-gold);display:flex;align-items:center;gap:14px;}
+.kicker-gold::before{content:"";display:block;width:32px;height:1px;background:var(--nw-gold);flex-shrink:0;}
+.h1{font-family:var(--ff-serif);font-size:96px;font-weight:700;line-height:1.06;letter-spacing:-0.01em;color:var(--nw-white);}
+.h1 em{font-style:italic;color:var(--nw-lavender);}
+.h2-dark{font-family:var(--ff-serif);font-size:72px;font-weight:700;line-height:1.08;color:var(--nw-white);}
+.h2-dark em{font-style:italic;color:var(--nw-lavender);}
+.h2{font-family:var(--ff-serif);font-size:52px;font-weight:700;line-height:1.1;color:var(--nw-text);}
+.h2 em{font-style:italic;color:var(--nw-muted);}
+.h3{font-family:var(--ff-serif);font-size:30px;font-weight:600;line-height:1.2;color:var(--nw-text);}
+.h3 em{font-style:italic;color:var(--nw-muted);}
+.subtitle{font-family:var(--ff-sans);font-size:22px;font-weight:400;line-height:1.5;color:var(--nw-gold);}
+.lead{font-family:var(--ff-sans);font-size:22px;font-weight:400;line-height:1.6;color:var(--nw-body);}
+.body-t{font-family:var(--ff-sans);font-size:19px;font-weight:400;line-height:1.65;color:var(--nw-body);}
+.caption{font-family:var(--ff-sans);font-size:14px;color:var(--nw-hint);line-height:1.5;}
+.gold-rule{width:48px;height:2px;background:var(--nw-gold);flex-shrink:0;}
+.purple-rule{width:48px;height:2px;background:var(--nw-muted);flex-shrink:0;}
+
+/* === BULLET LIST === */
+.blist{list-style:none;display:flex;flex-direction:column;gap:10px;}
+.blist li{display:flex;align-items:baseline;gap:14px;font-family:var(--ff-sans);font-size:20px;line-height:1.55;color:var(--nw-body);}
+.blist li::before{content:"—";font-family:var(--ff-mono);color:var(--nw-muted);font-size:13px;flex-shrink:0;}
+.blist li strong,.blist li span{font-family:var(--ff-sans);display:inline;}
+.blist li strong{font-weight:600;color:var(--nw-text);}
+.blist.sm li{font-size:18px;}
+
+/* === CARDS === */
+.card-row{display:flex;gap:1px;background:var(--nw-border-light);flex:1;}
+.card-col{background:var(--nw-lilac);padding:36px 40px;display:flex;flex-direction:column;gap:14px;flex:1;}
+.card-col.white{background:var(--nw-white);}
+.card-col.dark{background:var(--nw-dark);}
+.card-title{font-family:var(--ff-serif);font-size:26px;font-weight:600;color:var(--nw-text);line-height:1.2;}
+.card-title em{font-style:italic;color:var(--nw-muted);}
+.card-col.dark .card-title{color:var(--nw-white);}
+.card-body{font-family:var(--ff-sans);font-size:18px;line-height:1.6;color:var(--nw-body);}
+.card-col.dark .card-body{color:var(--nw-lavender);}
+.card-num{font-family:var(--ff-mono);font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--nw-muted);margin-bottom:4px;}
+.card-col.dark .card-num{color:var(--nw-lavender);}
+
+/* === TABLE === */
+.nw-table{width:100%;border-collapse:collapse;font-family:var(--ff-sans);font-size:17px;}
+.nw-table th{background:var(--nw-dark);color:var(--nw-white);font-weight:700;font-size:14px;text-align:left;padding:14px 20px;border:0.5px solid var(--nw-lavender);}
+.nw-table td{padding:12px 20px;border:0.5px solid var(--nw-lavender);color:var(--nw-text);vertical-align:top;line-height:1.45;}
+.nw-table tr:nth-child(odd) td{background:var(--nw-lilac);}
+.nw-table tr:nth-child(even) td{background:var(--nw-white);}
+.nw-table td strong{font-weight:600;color:var(--nw-text);}
+
+/* === SECTION DIVIDER === */
+.section-divider{background:var(--nw-dark);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:0 var(--pad-x);gap:var(--gap-md);}
+.section-badge{font-family:var(--ff-mono);font-size:11px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-lavender);}
+.section-num{font-family:var(--ff-serif);font-size:140px;font-weight:700;color:rgba(192,159,212,0.12);line-height:1;}
+.section-title{font-family:var(--ff-serif);font-size:80px;font-weight:700;line-height:1.06;color:var(--nw-white);}
+.section-title em{font-style:italic;color:var(--nw-lavender);}
+.section-sub{font-family:var(--ff-sans);font-size:22px;color:var(--nw-lilac);max-width:860px;}
+
+/* === BENEFIT BOX === */
+.benefit-box{background:var(--nw-lilac);border:1px solid var(--nw-lavender);border-radius:8px;padding:16px 20px;display:flex;align-items:center;gap:14px;font-family:var(--ff-sans);font-weight:600;font-style:italic;color:var(--nw-text);margin-bottom:10px;font-size:19px;}
+.benefit-box::before{content:"✓";font-family:var(--ff-mono);font-style:normal;font-size:16px;color:var(--nw-muted);flex-shrink:0;width:24px;text-align:center;}
+
+/* === QUOTE BLOCK === */
+.quote-block{border-left:3px solid var(--nw-gold);padding:16px 24px;background:var(--nw-offwhite);}
+.quote-text{font-family:var(--ff-serif);font-style:italic;font-size:22px;line-height:1.55;color:var(--nw-text);}
+.quote-source{font-family:var(--ff-mono);font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--nw-muted);margin-top:10px;}
+
+/* === REVEAL ANIMATIONS === */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity 0.6s var(--ease-expo),transform 0.6s var(--ease-expo);}
+.slide.active .reveal{opacity:1;transform:translateY(0);}
+.slide.active .reveal:nth-child(1){transition-delay:0.07s;}
+.slide.active .reveal:nth-child(2){transition-delay:0.16s;}
+.slide.active .reveal:nth-child(3){transition-delay:0.25s;}
+.slide.active .reveal:nth-child(4){transition-delay:0.34s;}
+.slide.active .reveal:nth-child(5){transition-delay:0.43s;}
+.slide.active .reveal:nth-child(6){transition-delay:0.52s;}
+.slide.active .reveal:nth-child(7){transition-delay:0.60s;}
+.reveal-fade{opacity:0;transition:opacity 0.75s var(--ease-expo);}
+.slide.active .reveal-fade{opacity:1;}
+.slide.active .reveal-fade:nth-child(1){transition-delay:0.1s;}
+.slide.active .reveal-fade:nth-child(2){transition-delay:0.25s;}
+.slide.active .reveal-fade:nth-child(3){transition-delay:0.4s;}
+.slide.active .reveal-fade:nth-child(4){transition-delay:0.55s;}
+
+/* === DECK CONTROLS === */
+.deck-controls{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:10px;}
+.nav-btn{background:rgba(75,0,130,0.88);border:1px solid var(--nw-border-dark);color:var(--nw-lavender);font-family:var(--ff-mono);font-size:12px;letter-spacing:0.1em;padding:7px 18px;cursor:pointer;transition:color 0.2s,border-color 0.2s;backdrop-filter:blur(8px);}
+.nav-btn:hover{color:var(--nw-gold);border-color:var(--nw-gold);}
+.slide-counter-ui{font-family:var(--ff-mono);font-size:11px;letter-spacing:0.14em;color:var(--nw-hint);min-width:56px;text-align:center;}
+
+/* === INLINE EDIT === */
+.edit-hotzone{position:fixed;top:0;left:0;width:80px;height:80px;z-index:10000;cursor:pointer;}
+.edit-toggle{position:fixed;top:14px;left:14px;z-index:10001;background:rgba(75,0,130,0.9);border:1px solid var(--nw-border-dark);color:var(--nw-lavender);font-size:15px;width:38px;height:38px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity 0.3s;backdrop-filter:blur(8px);}
+.edit-toggle.show,.edit-toggle.active{opacity:1;pointer-events:auto;}
+.edit-toggle.active{color:var(--nw-gold);border-color:var(--nw-gold);}
+[contenteditable="true"]{outline:1px dashed rgba(245,197,24,0.4);}
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+<section class="slide dark-slide active" id="s1">
+  <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--nw-gold);z-index:2;"></div>
+  <div style="display:flex;height:100%;">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 var(--pad-x);gap:var(--gap-md);">
+      <div class="kicker-gold reveal">NatWest Virtual Cards &mdash; SDD Pilot</div>
+      <h1 class="h1 reveal">Spec-Driven Development<br>with <em>Kiro</em></h1>
+      <div class="gold-rule reveal"></div>
+      <p class="subtitle reveal">Virtual Cards Pilot &mdash; workflow, concepts, and observations</p>
+      <div style="display:flex;gap:48px;margin-top:8px;" class="reveal">
+        <div style="display:flex;flex-direction:column;gap:4px;"><span style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--nw-hint);">Source</span><span style="font-family:var(--ff-sans);font-size:18px;color:var(--nw-white);">NatWest Virtual Cards SDD Pilot</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px;"><span style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--nw-hint);">Focus</span><span style="font-family:var(--ff-sans);font-size:18px;color:var(--nw-white);">Kiro only</span></div>
+      </div>
+    </div>
+    <div style="width:480px;border-left:1px solid var(--nw-border-dark);display:flex;flex-direction:column;justify-content:center;padding:0 52px;gap:16px;" class="reveal-fade">
+      <div style="font-family:var(--ff-serif);font-size:130px;font-weight:700;color:rgba(192,159,212,0.1);line-height:1;letter-spacing:-0.04em;">SDD</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:-12px;">
+        <div style="display:flex;align-items:center;gap:12px;font-family:var(--ff-sans);font-size:17px;color:var(--nw-lavender);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>What is SDD?</div>
+        <div style="display:flex;align-items:center;gap:12px;font-family:var(--ff-sans);font-size:17px;color:var(--nw-lavender);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Kiro workflow</div>
+        <div style="display:flex;align-items:center;gap:12px;font-family:var(--ff-sans);font-size:17px;color:var(--nw-lavender);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Requirements &amp; Design</div>
+        <div style="display:flex;align-items:center;gap:12px;font-family:var(--ff-sans);font-size:17px;color:var(--nw-lavender);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Tasks &amp; Steering</div>
+        <div style="display:flex;align-items:center;gap:12px;font-family:var(--ff-sans);font-size:17px;color:var(--nw-lavender);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Workflow customisation</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide light-slide" id="s2">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Context</span><span class="chrome-counter">02 / 14</span></div>
+    <div class="two-col left-wide" style="flex:1;">
+      <div class="col-left">
+        <div class="kicker reveal">Spec-Driven Development</div>
+        <h2 class="h2 reveal">Write the spec <em>before</em> the code</h2>
+        <p class="body-t reveal">SDD means writing a structured specification before writing code with AI. The spec becomes the shared source of truth for both the human and the AI agent.</p>
+        <ul class="blist reveal">
+          <li><strong>Spec-first</strong> — a well-thought-out spec is written before AI-assisted development begins</li>
+          <li><strong>Spec-anchored</strong> — the spec is kept after the task, used for evolution and maintenance</li>
+          <li><strong>Spec-as-source</strong> — the spec is the only artifact humans edit; code is fully generated</li>
+        </ul>
+        <p class="caption reveal" style="margin-top:8px;">Kiro is primarily spec-first. Spec-anchored and spec-as-source are more advanced levels not yet fully addressed by Kiro.</p>
+      </div>
+      <div class="col-right">
+        <div class="kicker reveal">What is a spec?</div>
+        <div class="quote-block reveal">
+          <p class="quote-text">A structured, behaviour-oriented artifact written in natural language that expresses software functionality and serves as guidance to AI coding agents.</p>
+          <p class="quote-source">NatWest Virtual Cards SDD Pilot</p>
+        </div>
+        <p class="body-t reveal" style="font-size:17px;">Specs differ from general context documents (rules files, product descriptions). Those apply across all sessions — specs are scoped to a specific feature or task.</p>
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro — Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+<section class="slide dark-slide section-divider" id="s3">
+  <div class="section-badge reveal">Section 01</div>
+  <div class="section-num reveal">01</div>
+  <h2 class="section-title reveal">Kiro <em>Overview</em></h2>
+  <p class="section-sub reveal">Spec-first &middot; VS Code-based &middot; EARS acceptance criteria &middot; Requirements &rarr; Design &rarr; Tasks</p>
+</section>
+
+<section class="slide light-slide" id="s4">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Kiro Overview</span><span class="chrome-counter">04 / 14</span></div>
+    <div class="slide-body top">
+      <div class="kicker reveal">What Kiro is</div>
+      <h2 class="h2 reveal">Lightweight, <em>spec-first</em>, VS Code-based</h2>
+      <div class="card-row reveal-fade" style="margin-top:8px;">
+        <div class="card-col">
+          <div class="card-num">Approach</div>
+          <div class="card-title">Spec-<em>first</em></div>
+          <div class="card-body">Kiro is the most lightweight of the SDD tools. It focuses on spec-first usage — writing a spec for a task or user story before AI-assisted coding begins. Spec-anchored usage over time is not a primary focus.</div>
+        </div>
+        <div class="card-col white">
+          <div class="card-num">Distribution</div>
+          <div class="card-title">VS Code <em>extension</em></div>
+          <div class="card-body">Kiro is distributed as a VS Code-based IDE. The three workflow steps are guided directly inside the editor, making the experience feel native and integrated.</div>
+        </div>
+        <div class="card-col">
+          <div class="card-num">Scope</div>
+          <div class="card-title">Task, story, or <em>wider orchestration</em></div>
+          <div class="card-body">The IDE workflow is human-in-the-loop by design — one task at a time with developer review. For broader automation, Kiro CLI supports the <strong>Ralph Loop</strong>: a shell script feeds the three spec files into <code style="font-family:var(--ff-mono);font-size:14px;color:var(--nw-muted);">kiro-cli chat</code> repeatedly, discarding context after each task to prevent degradation — enabling overnight autonomous execution across an entire task list.</div>
+        </div>
+        <div class="card-col white">
+          <div class="card-num">Memory bank</div>
+          <div class="card-title"><em>Steering</em> files</div>
+          <div class="card-body">Kiro calls its memory bank concept &ldquo;steering&rdquo;. Default topology: <code style="font-family:var(--ff-mono);font-size:15px;color:var(--nw-muted);">product.md</code>, <code style="font-family:var(--ff-mono);font-size:15px;color:var(--nw-muted);">structure.md</code>, <code style="font-family:var(--ff-mono);font-size:15px;color:var(--nw-muted);">tech.md</code>. Contents are flexible — no specific files are required by the workflow.</div>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro — Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+<section class="slide dark-slide section-divider" id="s5">
+  <div class="section-badge reveal">Section 02</div>
+  <div class="section-num reveal">02</div>
+  <h2 class="section-title reveal">The <em>Workflow</em></h2>
+  <p class="section-sub reveal">Requirements &rarr; Design &rarr; Tasks — three markdown documents, one guided flow</p>
+</section>
+
+<section class="slide light-slide" id="s6">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Kiro Workflow</span><span class="chrome-counter">06 / 14</span></div>
+    <div class="slide-body top">
+      <div class="kicker reveal">Three-step workflow</div>
+      <h2 class="h2 reveal">Each step is <em>one markdown document</em></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--nw-border-light);flex:1;margin-top:8px;" class="reveal-fade">
+        <div style="background:var(--nw-dark);padding:40px 44px;display:flex;flex-direction:column;gap:16px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-lavender);">Step 01</div>
+          <div style="font-family:var(--ff-serif);font-size:32px;font-weight:700;color:var(--nw-white);">Requirements</div>
+          <div style="width:32px;height:2px;background:var(--nw-gold);"></div>
+          <div style="font-family:var(--ff-sans);font-size:18px;line-height:1.6;color:var(--nw-lavender);">User Stories in &ldquo;As a&hellip;&rdquo; format with acceptance criteria in <strong style="color:var(--nw-white);">EARS format</strong> &mdash; <strong style="color:var(--nw-gold);">WHEN</strong> [trigger] <strong style="color:var(--nw-gold);">THE SYSTEM SHALL</strong> [response].</div>
+        </div>
+        <div style="background:var(--nw-lilac);padding:40px 44px;display:flex;flex-direction:column;gap:16px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-muted);">Step 02</div>
+          <div style="font-family:var(--ff-serif);font-size:32px;font-weight:700;color:var(--nw-text);">Design</div>
+          <div style="width:32px;height:2px;background:var(--nw-muted);"></div>
+          <div style="font-family:var(--ff-sans);font-size:18px;line-height:1.6;color:var(--nw-body);">A design document covering the technical approach. Structure may vary by task — Kiro generates this based on the requirements. Covers architecture, data models, and implementation approach.</div>
+        </div>
+        <div style="background:var(--nw-white);padding:40px 44px;display:flex;flex-direction:column;gap:16px;border-left:1px solid var(--nw-border-light);">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-muted);">Step 03</div>
+          <div style="font-family:var(--ff-serif);font-size:32px;font-weight:700;color:var(--nw-text);">Tasks</div>
+          <div style="width:32px;height:2px;background:var(--nw-muted);"></div>
+          <div style="font-family:var(--ff-sans);font-size:18px;line-height:1.6;color:var(--nw-body);">A list of implementation tasks that <strong>trace back to requirement numbers</strong>. Each task gets UI controls to run it individually and review the resulting code changes per task.</div>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro — Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+
+<section class="slide light-slide" id="s7">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Kiro Workflow — Requirements</span><span class="chrome-counter">07 / 14</span></div>
+    <div class="two-col" style="flex:1;">
+      <div class="col-left">
+        <div class="kicker reveal">Step 01 — Requirements</div>
+        <h2 class="h2 reveal">User stories with <em>EARS</em> acceptance criteria</h2>
+        <ul class="blist reveal" style="gap:14px;">
+          <li><span>Each requirement is a <span style="font-weight:600;color:var(--nw-text);">User Story</span> in &ldquo;As a &hellip;&rdquo; format</span></li>
+          <li><span>Acceptance criteria use <span style="font-weight:600;color:var(--nw-text);">EARS format</span> &mdash; Easy Approach to Requirements Syntax</span></li>
+          <li><span>EARS pattern: <span style="font-weight:600;color:var(--nw-text);">WHEN</span> [condition] <span style="font-weight:600;color:var(--nw-text);">THE SYSTEM SHALL</span> [behaviour]</span></li>
+          <li><span>Requirements are numbered &mdash; tasks in step 3 trace back to these numbers</span></li>
+          <li><span>Kiro generates this document; the developer reviews and refines it</span></li>
+        </ul>
+      </div>
+      <div class="col-right">
+        <div class="kicker reveal">Acceptance criteria format</div>
+        <div style="display:flex;flex-direction:column;gap:12px;" class="reveal">
+          <div style="background:var(--nw-dark);padding:20px 24px;border-radius:4px;">
+            <div style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-gold);margin-bottom:12px;">User Story</div>
+            <div style="font-family:var(--ff-sans);font-size:17px;color:var(--nw-white);line-height:1.5;">As a <em style="color:var(--nw-lavender);">developer</em>, I want to <em style="color:var(--nw-lavender);">configure the service externally</em>, so that <em style="color:var(--nw-lavender);">I can deploy to different environments without rebuilding</em>.</div>
+          </div>
+          <div style="background:var(--nw-lilac);padding:20px 24px;border-radius:4px;border:1px solid var(--nw-lavender);">
+            <div style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-muted);margin-bottom:12px;">Acceptance Criteria &mdash; EARS Format</div>
+            <div style="font-family:var(--ff-sans);font-size:16px;color:var(--nw-body);line-height:1.9;">
+              <span style="color:var(--nw-muted);font-weight:600;">WHEN</span> the service starts with an environment variable set<br>
+              <span style="color:var(--nw-muted);font-weight:600;">THE SYSTEM SHALL</span> use that value instead of the default<br><br>
+              <span style="color:var(--nw-muted);font-weight:600;">WHEN</span> no environment variable is provided<br>
+              <span style="color:var(--nw-muted);font-weight:600;">THE SYSTEM SHALL</span> fall back to the built-in default value
+            </div>
+          </div>
+          <div style="background:var(--nw-offwhite);padding:12px 16px;border-radius:4px;border:1px solid var(--nw-border-light);">
+            <div style="font-family:var(--ff-mono);font-size:12px;color:var(--nw-muted);">EARS = Easy Approach to Requirements Syntax &mdash; unambiguous, testable, traceable</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro — Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+
+<section class="slide light-slide" id="s8">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Steering &amp; Skills</span><span class="chrome-counter">08 / 14</span></div>
+    <div class="two-col" style="flex:1;">
+      <!-- LEFT: Steering -->
+      <div class="col-left">
+        <div class="kicker reveal">Steering &mdash; always-on context</div>
+        <h2 class="h2 reveal">Steering &amp; Skills: <em>persistent knowledge</em></h2>
+        <p class="body-t reveal" style="font-size:18px;">Steering files are markdown documents that give the AI persistent awareness of your project across every session. They are always loaded — no activation needed.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;" class="reveal-fade">
+          <div class="benefit-box">product.md &mdash; what the product is and does</div>
+          <div class="benefit-box">structure.md &mdash; how the codebase is organised</div>
+          <div class="benefit-box">tech.md &mdash; technology stack and conventions</div>
+        </div>
+        <p class="caption reveal" style="margin-top:12px;">Steering is Kiro-specific. Supports <code style="font-family:var(--ff-mono);font-size:13px;">always</code>, <code style="font-family:var(--ff-mono);font-size:13px;">fileMatch</code>, and <code style="font-family:var(--ff-mono);font-size:13px;">manual</code> inclusion modes. Use for project standards and team conventions.</p>
+      </div>
+      <!-- RIGHT: Skills -->
+      <div class="col-right">
+        <div class="kicker reveal">Skills &mdash; on-demand workflows</div>
+        <p class="body-t reveal" style="font-size:18px;">Skills are portable instruction packages that load <span style="font-weight:600;color:var(--nw-text);">only when needed</span>. They follow the open Agent Skills standard and can be shared across teams and tools.</p>
+        <ul class="blist reveal" style="gap:11px;margin-top:4px;">
+          <li><span><span style="font-weight:600;color:var(--nw-text);">Progressive disclosure</span> &mdash; only name &amp; description loaded at startup; full instructions activate on match</span></li>
+          <li><span>Invoke explicitly with <code style="font-family:var(--ff-mono);font-size:14px;color:var(--nw-muted);">/skill-name</code> slash command in chat</span></li>
+          <li><span>Workspace scope <code style="font-family:var(--ff-mono);font-size:14px;color:var(--nw-muted);">.kiro/skills/</code> or global <code style="font-family:var(--ff-mono);font-size:14px;color:var(--nw-muted);">~/.kiro/skills/</code></span></li>
+          <li><span>Can include scripts for deterministic tasks &mdash; validation, file generation, API calls</span></li>
+          <li><span>Importable from community via GitHub URL</span></li>
+        </ul>
+        <!-- Context Hub callout -->
+        <div style="margin-top:14px;background:var(--nw-dark);border-radius:6px;padding:16px 20px;display:flex;flex-direction:column;gap:10px;" class="reveal">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--nw-gold);">Context Hub &mdash; planned addition</div>
+          <div style="font-family:var(--ff-sans);font-size:16px;color:var(--nw-lavender);line-height:1.55;">Skills can be sourced from the community via <span style="color:var(--nw-white);font-weight:600;">Context Hub</span> (<code style="font-family:var(--ff-mono);font-size:13px;color:var(--nw-gold);">chub get author/skill-name</code>). Future plan: also pull <span style="color:var(--nw-white);font-weight:600;">Docs</span> on-demand &mdash; large API/SDK reference knowledge fetched per-task, without bloating always-on context.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px;">
+            <div style="background:rgba(192,159,212,0.12);border-radius:4px;padding:8px 10px;text-align:center;">
+              <div style="font-family:var(--ff-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:3px;">Steering</div>
+              <div style="font-family:var(--ff-sans);font-size:13px;color:var(--nw-white);">Always loaded</div>
+            </div>
+            <div style="background:rgba(192,159,212,0.12);border-radius:4px;padding:8px 10px;text-align:center;">
+              <div style="font-family:var(--ff-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:3px;">Skills</div>
+              <div style="font-family:var(--ff-sans);font-size:13px;color:var(--nw-white);">On activation</div>
+            </div>
+            <div style="background:rgba(245,197,24,0.1);border-radius:4px;padding:8px 10px;text-align:center;border:1px dashed rgba(245,197,24,0.3);">
+              <div style="font-family:var(--ff-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-gold);margin-bottom:3px;">Docs (chub)</div>
+              <div style="font-family:var(--ff-sans);font-size:13px;color:var(--nw-white);">Per-task, on demand</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro &mdash; Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+
+<section class="slide light-slide" id="s9">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Tool Integration</span><span class="chrome-counter">09 / 14</span></div>
+    <div class="slide-body top">
+      <div class="kicker reveal">Virtual Cards Pilot — ecosystem</div>
+      <h2 class="h2 reveal">MCP tools, Skills Hub, and <em>Context Hub</em></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--nw-border-light);flex:1;margin-top:12px;" class="reveal-fade">
+
+        <!-- Col 1: Project tools -->
+        <div style="background:var(--nw-lilac);padding:32px 36px;display:flex;flex-direction:column;gap:14px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--nw-muted);">MCP — Project &amp; Docs</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;gap:14px;align-items:flex-start;">
+              <div style="width:36px;height:36px;background:var(--nw-dark);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ff-mono);font-size:11px;font-weight:600;color:var(--nw-gold);">JR</div>
+              <div><div style="font-family:var(--ff-sans);font-size:17px;font-weight:600;color:var(--nw-text);">Jira</div><div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-body);line-height:1.5;">Tickets pulled directly into spec requirements — user stories and acceptance criteria generated from existing Jira issues</div></div>
+            </div>
+            <div style="display:flex;gap:14px;align-items:flex-start;">
+              <div style="width:36px;height:36px;background:var(--nw-dark);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ff-mono);font-size:11px;font-weight:600;color:var(--nw-gold);">CF</div>
+              <div><div style="font-family:var(--ff-sans);font-size:17px;font-weight:600;color:var(--nw-text);">Confluence</div><div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-body);line-height:1.5;">Architecture docs and team standards fed into steering context — agent stays aligned with existing decisions</div></div>
+            </div>
+            <div style="display:flex;gap:14px;align-items:flex-start;">
+              <div style="width:36px;height:36px;background:var(--nw-dark);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ff-mono);font-size:11px;font-weight:600;color:var(--nw-gold);">GL</div>
+              <div><div style="font-family:var(--ff-sans);font-size:17px;font-weight:600;color:var(--nw-text);">GitLab</div><div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-body);line-height:1.5;">Source control, MR reviews, and CI integration — also hosts the internal <strong style="color:var(--nw-text);">Skills Hub</strong></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 2: Knowledge tools -->
+        <div style="background:var(--nw-white);padding:32px 36px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--nw-border-light);">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--nw-muted);">MCP — API Knowledge</div>
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:36px;height:36px;background:var(--nw-dark);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ff-mono);font-size:11px;font-weight:600;color:var(--nw-gold);">C7</div>
+            <div><div style="font-family:var(--ff-sans);font-size:17px;font-weight:600;color:var(--nw-text);">Context7</div><div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-body);line-height:1.5;margin-top:2px;">Fetches up-to-date library and framework docs on demand — agent gets accurate API knowledge without hitting training cutoffs</div></div>
+          </div>
+          <div style="margin-top:4px;padding:14px 16px;background:var(--nw-offwhite);border-radius:6px;border:1px solid var(--nw-border-light);">
+            <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--nw-muted);margin-bottom:8px;">Planned addition</div>
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              <div style="width:36px;height:36px;background:rgba(245,197,24,0.15);border:1px dashed rgba(245,197,24,0.4);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--ff-mono);font-size:10px;font-weight:600;color:var(--nw-gold);">CH</div>
+              <div><div style="font-family:var(--ff-sans);font-size:17px;font-weight:600;color:var(--nw-text);">Context Hub <span style="font-family:var(--ff-mono);font-size:12px;font-weight:400;color:var(--nw-hint);">(chub)</span></div><div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-body);line-height:1.5;margin-top:2px;">Registry of curated Docs and Skills — fetch API reference per-task or install workflow skills. Supports internal GitLab source alongside community CDN</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 3: Skills Hub -->
+        <div style="background:var(--nw-dark);padding:32px 36px;display:flex;flex-direction:column;gap:14px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--nw-lavender);">Internal Skills Hub</div>
+          <div style="font-family:var(--ff-serif);font-size:24px;font-weight:600;color:var(--nw-white);line-height:1.2;">NatWest Skills Hub<br><span style="font-size:16px;font-weight:400;color:var(--nw-lavender);">Hosted on GitLab</span></div>
+          <div style="width:32px;height:2px;background:var(--nw-gold);"></div>
+          <div style="font-family:var(--ff-sans);font-size:16px;color:var(--nw-lavender);line-height:1.6;">A curated collection of commonly used skills maintained by the team and hosted in GitLab. Import any skill directly into <code style="font-family:var(--ff-mono);font-size:13px;color:var(--nw-gold);">.kiro/skills/</code> via the Kiro panel.</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+            <div style="display:flex;align-items:center;gap:10px;font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Team coding standards &amp; review checklists</div>
+            <div style="display:flex;align-items:center;gap:10px;font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Deployment &amp; release procedures</div>
+            <div style="display:flex;align-items:center;gap:10px;font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>API integration patterns</div>
+            <div style="display:flex;align-items:center;gap:10px;font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);"><span style="width:5px;height:5px;border-radius:50%;background:var(--nw-gold);flex-shrink:0;"></span>Security &amp; compliance checks</div>
+          </div>
+          <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;">
+            <div style="padding:10px 14px;background:rgba(192,159,212,0.12);border-radius:4px;">
+              <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:6px;">Skills Hub CLI</div>
+              <div style="font-family:var(--ff-mono);font-size:13px;color:var(--nw-gold);">skillshub install</div>
+              <div style="font-family:var(--ff-sans);font-size:14px;color:var(--nw-lavender);margin-top:6px;line-height:1.5;">Reads a project-level <strong style="color:var(--nw-white);">skill manifest file</strong> and loads the right skills into <code style="font-family:var(--ff-mono);font-size:12px;color:var(--nw-gold);">.kiro/skills/</code> automatically &mdash; no manual URL imports needed</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro &mdash; Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+
+<section class="slide dark-slide section-divider" id="s10">
+  <div class="section-badge reveal">Section 03</div>
+  <div class="section-num reveal">03</div>
+  <h2 class="section-title reveal">Workflow <em>Customisation</em></h2>
+  <p class="section-sub reveal">Three distinct workflows — each sized for a different type of problem</p>
+</section>
+
+<section class="slide light-slide" id="s11">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Workflow Customisation</span><span class="chrome-counter">13 / 14</span></div>
+    <div class="slide-body top">
+      <div class="kicker reveal">kiro.dev/docs/specs</div>
+      <h2 class="h2 reveal">Pick the workflow that <em>fits the problem</em></h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--nw-border-light);flex:1;margin-top:8px;" class="reveal-fade">
+
+        <div style="background:var(--nw-dark);padding:36px 40px;display:flex;flex-direction:column;gap:14px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-lavender);">Feature Spec</div>
+          <div style="font-family:var(--ff-serif);font-size:28px;font-weight:700;color:var(--nw-white);line-height:1.15;">Requirements-<br>First</div>
+          <div style="width:32px;height:2px;background:var(--nw-gold);"></div>
+          <div style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.1em;color:var(--nw-gold);">Requirements &rarr; Design &rarr; Tasks</div>
+          <div style="font-family:var(--ff-sans);font-size:17px;line-height:1.6;color:var(--nw-lavender);margin-top:4px;">Start with <strong style="color:var(--nw-white);">what</strong> the system should do before deciding <strong style="color:var(--nw-white);">how</strong> to build it. Best for greenfield projects, clear user stories, and flexible architecture.</div>
+          <div style="margin-top:auto;padding-top:16px;border-top:1px solid rgba(192,159,212,0.3);display:flex;flex-direction:column;gap:7px;">
+            <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:2px;">Best for</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);">&#x2713;&nbsp; Clear user stories</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);">&#x2713;&nbsp; Greenfield projects</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-white);">&#x2713;&nbsp; Flexible architecture</div>
+          </div>
+        </div>
+
+        <div style="background:var(--nw-lilac);padding:36px 40px;display:flex;flex-direction:column;gap:14px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-muted);">Feature Spec</div>
+          <div style="font-family:var(--ff-serif);font-size:28px;font-weight:700;color:var(--nw-text);line-height:1.15;">Design-<br>First</div>
+          <div style="width:32px;height:2px;background:var(--nw-muted);"></div>
+          <div style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.1em;color:var(--nw-muted);">Design &rarr; Requirements &rarr; Tasks</div>
+          <div style="font-family:var(--ff-sans);font-size:17px;line-height:1.6;color:var(--nw-body);margin-top:4px;">Start with <strong>how</strong> and derive <strong>what</strong> from it. Requirements are guaranteed feasible because they come from a validated architecture. Two detail levels: High Level or Low Level Design.</div>
+          <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--nw-border-light);display:flex;flex-direction:column;gap:7px;">
+            <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-muted);margin-bottom:2px;">Best for</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-text);">&#x2713;&nbsp; Existing architecture diagrams</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-text);">&#x2713;&nbsp; Strict non-functional requirements</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-text);">&#x2713;&nbsp; Rapid prototyping with known stack</div>
+          </div>
+        </div>
+
+        <div style="background:var(--nw-white);padding:36px 40px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--nw-border-light);">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--nw-muted);">Bugfix Spec</div>
+          <div style="font-family:var(--ff-serif);font-size:28px;font-weight:700;color:var(--nw-text);line-height:1.15;">Bugfix<br>Spec</div>
+          <div style="width:32px;height:2px;background:var(--nw-muted);"></div>
+          <div style="font-family:var(--ff-mono);font-size:12px;letter-spacing:0.1em;color:var(--nw-muted);">Analysis &rarr; Design &rarr; Tasks</div>
+          <div style="font-family:var(--ff-sans);font-size:17px;line-height:1.6;color:var(--nw-body);margin-top:4px;">Surgical fixes with explicit regression prevention. The <code style="font-family:var(--ff-mono);font-size:15px;color:var(--nw-muted);">bugfix.md</code> captures current behaviour, expected behaviour, and unchanged behaviour — so the agent knows exactly what must not break.</div>
+          <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--nw-border-light);display:flex;flex-direction:column;gap:7px;">
+            <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--nw-muted);margin-bottom:2px;">Best for</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-text);">&#x2713;&nbsp; Complex root-cause analysis</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-text);">&#x2713;&nbsp; Critical code paths</div>
+            <div style="font-family:var(--ff-sans);font-size:15px;color:var(--nw-text);">&#x2713;&nbsp; Compliance / audit documentation</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro — Spec-Driven Development</span><span class="foot-label">kiro.dev/docs/specs</span></div>
+  </div>
+</section>
+
+<section class="slide dark-slide section-divider" id="s12">
+  <div class="section-badge reveal">Section 04</div>
+  <div class="section-num reveal">04</div>
+  <h2 class="section-title reveal">Honest <em>Observations</em></h2>
+  <p class="section-sub reveal">What works, what doesn&rsquo;t, and open questions from real usage</p>
+</section>
+
+<section class="slide light-slide" id="s13">
+  <div class="slide-inner">
+    <div class="chrome-bar"><span class="chrome-label">Observations</span><span class="chrome-counter">11 / 14</span></div>
+    <div class="slide-body top">
+      <div class="kicker reveal">Updated view — Kiro docs + Martin Fowler</div>
+      <h2 class="h2 reveal">Key observations and <em>open questions</em></h2>
+      <table class="nw-table reveal" style="margin-top:8px;">
+        <thead>
+          <tr>
+            <th style="width:26%;">Observation</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Problem sizing</strong></td>
+            <td>Kiro offers <strong>three distinct workflows</strong> — Requirements-First, Design-First, and Bugfix Specs — each sized for a different type of problem. No single workflow is forced on every task.</td>
+          </tr>
+          <tr>
+            <td><strong>Reviewing markdown</strong></td>
+            <td>With only 3 files per spec, the mental model of requirements &rarr; design &rarr; tasks is intuitive. Bugfix Specs reduce this further to a single focused <strong>bugfix.md</strong>, cutting review overhead for fixes.</td>
+          </tr>
+          <tr>
+            <td><strong>Spec-anchoring</strong></td>
+            <td>Kiro is primarily spec-first. Spec-anchored usage — maintaining a spec across a feature's lifetime through multiple tasks — is not yet a documented part of the workflow.</td>
+          </tr>
+          <tr>
+            <td><strong>Agent compliance</strong></td>
+            <td>Bugfix Specs include <strong>property-based tests</strong> that verify the bug is reproducible, the fix works, and no regressions are introduced — making agent compliance objectively verifiable rather than assumed.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="foot-bar"><span class="foot-label">Kiro — Spec-Driven Development</span><span class="foot-label">NatWest Virtual Cards SDD Pilot</span></div>
+  </div>
+</section>
+
+<section class="slide dark-slide" id="s14">
+  <div style="display:flex;height:100%;">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 var(--pad-x);gap:var(--gap-md);">
+      <div class="kicker-gold reveal">Summary</div>
+      <h2 class="h2-dark reveal">Kiro in <em>one paragraph</em></h2>
+      <div class="gold-rule reveal"></div>
+      <p class="reveal" style="font-family:var(--ff-sans);font-size:22px;line-height:1.7;color:var(--nw-lavender);max-width:900px;">Kiro is the most lightweight SDD tool available today. Its three-step workflow — Requirements, Design, Tasks — is intuitive and well-structured. The steering concept provides useful persistent context. The main limitations are its spec-first-only focus (no spec-anchoring), verbosity on small tasks, and the universal challenge that AI agents don&rsquo;t always follow all spec instructions.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:16px;" class="reveal">
+        <div style="border-top:1px solid var(--nw-border-dark);padding-top:16px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:8px;">Strength</div>
+          <div style="font-family:var(--ff-sans);font-size:17px;color:var(--nw-white);line-height:1.5;">Simple 3-file workflow, intuitive mental model, VS Code-native</div>
+        </div>
+        <div style="border-top:1px solid var(--nw-border-dark);padding-top:16px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:8px;">Limitation</div>
+          <div style="font-family:var(--ff-sans);font-size:17px;color:var(--nw-white);line-height:1.5;">Spec-first only, no spec-anchoring, overkill for small tasks</div>
+        </div>
+        <div style="border-top:1px solid var(--nw-border-dark);padding-top:16px;">
+          <div style="font-family:var(--ff-mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--nw-lavender);margin-bottom:8px;">Best for</div>
+          <div style="font-family:var(--ff-sans);font-size:17px;color:var(--nw-white);line-height:1.5;">Medium-sized features, greenfield tasks, structured AI-assisted coding</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<div class="deck-controls">
+  <button class="nav-btn" id="prevBtn">&larr; PREV</button>
+  <span class="slide-counter-ui" id="slideCounterUI">1 / 14</span>
+  <button class="nav-btn" id="nextBtn">NEXT &rarr;</button>
+</div>
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)">&#x270F;&#xFE0F;</button>
+
+<script>
+(function() {
+  var slides = document.querySelectorAll(".slide");
+  var total = slides.length;
+  var current = 0;
+  var stage = document.getElementById("deckStage");
+  var counterUI = document.getElementById("slideCounterUI");
+
+  /* === Stage scaling === */
+  function scaleStage() {
+    var f = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    var tx = (window.innerWidth - 1920 * f) / 2;
+    var ty = (window.innerHeight - 1080 * f) / 2;
+    stage.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + f + ")";
+  }
+  scaleStage();
+  window.addEventListener("resize", scaleStage);
+
+  /* === Slide navigation === */
+  function showSlide(idx) {
+    idx = Math.max(0, Math.min(idx, total - 1));
+    slides[current].classList.remove("active");
+    current = idx;
+    slides[current].classList.add("active");
+    counterUI.textContent = (current + 1) + " / " + total;
+  }
+  function next() { showSlide(current + 1); }
+  function prev() { showSlide(current - 1); }
+
+  /* === Keyboard === */
+  document.addEventListener("keydown", function(e) {
+    if (editor.isActive && e.target && e.target.getAttribute("contenteditable")) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " " || e.key === "PageDown") { e.preventDefault(); next(); }
+    if (e.key === "ArrowLeft"  || e.key === "ArrowUp"   || e.key === "PageUp")                  { e.preventDefault(); prev(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); if (editor.isActive) editor.saveToStorage(); }
+  });
+
+  /* === Buttons === */
+  document.getElementById("nextBtn").addEventListener("click", next);
+  document.getElementById("prevBtn").addEventListener("click", prev);
+
+  /* === Touch swipe === */
+  var touchStartX = 0;
+  document.addEventListener("touchstart", function(e) { touchStartX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener("touchend",   function(e) {
+    var dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+  }, { passive: true });
+
+  /* === Mouse wheel === */
+  var wheelLock = false;
+  document.addEventListener("wheel", function(e) {
+    if (wheelLock) return;
+    wheelLock = true;
+    e.deltaY > 0 ? next() : prev();
+    setTimeout(function() { wheelLock = false; }, 600);
+  }, { passive: true });
+
+  /* === Inline editor === */
+  var editor = {
+    isActive: false,
+    editables: [],
+    toggleEditMode: function() {
+      document.getElementById("editToggle").classList.toggle("active", this.isActive);
+      if (this.isActive) {
+        this.editables = Array.from(document.querySelectorAll(
+          ".slide h1,.slide h2,.slide h3,.slide p,.slide li,.slide td,.slide .card-title,.slide .card-body,.slide .subtitle,.slide .section-title,.slide .section-sub,.slide .quote-text"
+        ));
+        this.editables.forEach(function(el) { el.setAttribute("contenteditable", "true"); });
+      } else {
+        this.editables.forEach(function(el) { el.removeAttribute("contenteditable"); });
+        this.saveToStorage();
+      }
+    },
+    saveToStorage: function() {
+      try { localStorage.setItem("kiro-sdd-deck", document.getElementById("deckStage").innerHTML); } catch(e) {}
+    }
+  };
+
+  /* === Edit hotzone hover === */
+  var hotzone   = document.getElementById("editHotzone");
+  var editToggle = document.getElementById("editToggle");
+  var hideTimeout = null;
+  hotzone.addEventListener("mouseenter", function() { clearTimeout(hideTimeout); editToggle.classList.add("show"); });
+  editToggle.addEventListener("mouseenter", function() { clearTimeout(hideTimeout); });
+  hotzone.addEventListener("click",   function() { editor.toggleEditMode(); });
+  editToggle.addEventListener("click", function() { editor.toggleEditMode(); });
+
+  showSlide(0);
+})();
+</script>
+</body>
+</html>
